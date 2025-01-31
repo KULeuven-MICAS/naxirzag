@@ -16,3 +16,4 @@ jobs:
           cache: true
           cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
       - name: check pyright
+        run: pixi run pyright

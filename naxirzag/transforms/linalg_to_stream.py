@@ -170,13 +170,31 @@ def process_cme(cme: CostModelEvaluation, target: SSAValue):
     return all_tiling_ops
 
 
+@dataclass
 class LinalgToStreamTranslator(RewritePattern):
+    zigzag_hardware_path: str | None
+    zigzag_mapping_path: str | None
+
     @op_type_rewrite_pattern
     def match_and_rewrite(self, generic_op: GenericOp, rewriter: PatternRewriter):
         if len(generic_op.outputs) != 1:
             return
         if not isinstance(generic_op.outputs[0].type, ShapedType):
             return
+
+        # get zigzag default paths if none specified
+        if self.zigzag_hardware_path is None:
+            hardware_path = (
+                importlib.resources.files("zigzag.inputs.hardware") / "gemm_l1_l3.yaml"
+            )
+        else:
+            hardware_path = self.zigzag_hardware_path
+        if self.zigzag_mapping_path is None:
+            mapping_path = (
+                importlib.resources.files("zigzag.inputs.mapping") / "gemm_l1_l3.yaml"
+            )
+        else:
+            mapping_path = self.zigzag_mapping_path
 
         # generate zigzag workload
         workload = generate_zigzag_workload(generic_op)
@@ -246,8 +264,13 @@ class LinalgToStreamTranslator(RewritePattern):
 @dataclass(frozen=True)
 class LinalgToStream(ModulePass):
     name = "linalg-to-stream"
+    zz_hw: str | None
+    zz_map: str | None
 
     def apply(self, ctx: MLContext, op: builtin.ModuleOp) -> None:
         PatternRewriteWalker(
-            LinalgToStreamTranslator(), apply_recursively=False
+            LinalgToStreamTranslator(
+                zigzag_hardware_path=self.zz_hw, zigzag_mapping_path=self.zz_map
+            ),
+            apply_recursively=False,
         ).rewrite_module(op)
